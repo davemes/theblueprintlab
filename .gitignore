@@ -6,3 +6,4 @@ venv/
 make*
 Make*
 .env
+*.egg-info/

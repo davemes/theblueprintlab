@@ -2,6 +2,12 @@ import requests
 import json
 import random
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+import os
+
+# 🔐 .env laden
+load_dotenv()
+ACCESS_TOKEN = os.getenv("HUBSPOT_API_KEY")
 
 URL = "https://api.hubapi.com/crm/v3/objects/deals"
 
@@ -22,7 +28,7 @@ DEAL_STAGES = [
 ]
 
 # 🔹 200 Deals generieren
-for i in range(200):
+for i in range(2):
     deal_name = f"Deal {i+1}"
     amount = random.randint(500, 20000)  # Zufälliger Betrag zwischen 500€ und 20.000€
     stage = random.choice(DEAL_STAGES)  # Zufällige Deal-Stage auswählen

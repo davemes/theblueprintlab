@@ -9,7 +9,10 @@ setup(
         'python-dotenv',
         'setuptools',
         'openai',
-        'datetime'
+        'datetime',
+        'gspread',
+        'google-auth',
+        'oauth2client'
     ],
     author='David Meszaros',
     description='Automatisierung und Analyse für HubSpot und mehr',

@@ -4,7 +4,7 @@ from google.oauth2.service_account import Credentials
 
 # Auth for Google Sheets
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
-CREDS_FILE = "hs-sales-pipeline-analysis-0d212e642d40.json"  # Dein JSON-File
+# Dein JSON-File
 SPREADSHEET_NAME = "HubSpot - Sales Pipeline Analysis"
 TAB_NAME = "HubSpot Raw Data"
 
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 ACCESS_TOKEN = os.getenv("HUBSPOT_API_KEY")
 
-URL = "https://api.hubapi.com/crm/v3/objects/deals?limit=100&properties=dealname,amount,dealstage,closedate"
+URL = "https://api.hubapi.com/crm/v3/objects/deals?limit=100&properties=dealname,amount,probability_amount,probability,dealstage,dealtype,closedate,createdate"
 
 headers = {
     "Authorization": f"Bearer {ACCESS_TOKEN}",
@@ -38,8 +38,12 @@ while True:
         deals.append([
             props.get("dealname", ""),
             props.get("amount", ""),
+            props.get("probability_amount", ""),
+            props.get("probability", ""),
             props.get("dealstage", ""),
-            props.get("closedate", "")
+            props.get("dealtype", ""),
+            props.get("closedate", "")[:10],
+            props.get("createdate", "")[:10]
         ])
     
     if not response.get("paging"):
@@ -48,7 +52,7 @@ while True:
 
 # Write to Google Sheet
 sheet.clear()
-sheet.append_row(["Deal Name", "Amount", "Deal Stage", "Close Date"])
+sheet.append_row(["Deal Name", "Amount", "Forecast Amount", "Probability", "Deal Stage", "Deal Type", "Close Date", "Create Date"])
 sheet.append_rows(deals)
 
 print("✅ Export complete. Deals written to Google Sheet.")

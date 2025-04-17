@@ -48,11 +48,10 @@ DEAL_TYPES = [
     "existingbusiness" # 2. Existing Business Deal - Existing Logo
 ]
 
-# 🔹 Generate 200 Deals
-for i in range(2):
+# 🔹 Generate Deals
+for i in range(1000):
     deal_name = f"Deal {i+1}"
     amount = random.randint(500, 20000)  # Random amount between 500€ and 20,000€
-    #formatted_amount = f"{amount:,}".replace(",", ".")  # Format amount with thousands separator
     stage = random.choice(DEAL_STAGES)  # Randomly select a deal stage
     probability = STAGE_PROBABILITIES[stage]
     forecast_amount = round(amount * probability, 2)

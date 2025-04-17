@@ -1,6 +1,7 @@
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
+import random
 
 # Auth for Google Sheets
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
@@ -25,6 +26,17 @@ headers = {
     "Content-Type": "application/json"
 }
 
+# 🔹 Random Deal Owners
+DEAL_OWNERS = [
+    "John",  
+    "Celine",       
+    "Margaret", 
+    "Charlotte", 
+    "David",          
+    "Andre",             
+    "Philip"             
+]
+
 # Fetch deals from HubSpot
 deals = []
 after = None
@@ -36,6 +48,7 @@ while True:
     for deal in response.get("results", []):
         props = deal["properties"]
         deals.append([
+            random.choice(DEAL_OWNERS),
             props.get("dealname", ""),
             props.get("amount", ""),
             props.get("probability_amount", ""),
@@ -52,7 +65,7 @@ while True:
 
 # Write to Google Sheet
 sheet.clear()
-sheet.append_row(["Deal Name", "Amount", "Forecast Amount", "Probability", "Deal Stage", "Deal Type", "Close Date", "Create Date"])
+sheet.append_row(["Deal Owner", "Deal Name", "Amount", "Forecast Amount", "Probability", "Deal Stage", "Deal Type", "Close Date", "Create Date"])
 sheet.append_rows(deals)
 
 print("✅ Export complete. Deals written to Google Sheet.")

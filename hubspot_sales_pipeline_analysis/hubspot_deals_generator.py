@@ -22,6 +22,7 @@ HEADERS = {
 
 # 🔹 Possible Deal Stages in HubSpot
 DEAL_STAGES = [
+    "sql",
     "appointmentscheduled",
     "qualifiedtobuy",
     "presentationscheduled",
@@ -31,8 +32,12 @@ DEAL_STAGES = [
     "closedlost"
 ]
 
+# 🔹 Deal Types
+DEAL_TYPE = ["newbusiness"]
+
 # 🔹 Deal Probabilities
 STAGE_PROBABILITIES = {
+    "sql": 0.05,
     "appointmentscheduled": 0.10,
     "qualifiedtobuy": 0.25,
     "presentationscheduled": 0.40,
@@ -73,99 +78,102 @@ COMPANY_NAMES = [
     "NovaFusion Inc.",
     "Zenith Data Solutions",
     "Summit Strategies",
-    "PrimeTech Solutions"
+    "PrimeTech Solutions",
+    "Orbitra Digital",
+    "Veridex Ventures",
+    "Brightforge Innovations",
+    "Quantico Metrics",
+    "Stratosync Systems",
+    "Lumeno Labs",
+    "Zenithon Consulting",
+    "Corevista Technologies",
+    "Blueleaf Analytics",
+    "Nexora Solutions"
 ]
 
 # 🔹 Deal Name Variations
 DEAL_NAME_VARIATIONS = [
-    "New Business Proposal",
-    "Service Agreement",
-    "Strategic Partnership",
-    "Consulting Opportunity",
-    "Technology Integration",
-    "Expansion Contract",
-    "Investment Deal",
-    "Joint Venture",
-    "Growth Opportunity",
-    "Acquisition Negotiations",
-    "Renewal Proposal",
-    "Collaborative Partnership",
-    "Exclusive Offer",
-    "Exclusive Licensing Deal",
-    "Sales Expansion",
-    "Strategic Alliance",
-    "Business Development Proposal",
-    "Long-Term Partnership",
-    "Custom Solution",
-    "New Market Entry",
-    "Merger Proposal",
-    "Contract Renewal",
-    "Consulting Engagement",
-    "Market Expansion Proposal"
+    "Onboarding – CloudOps Starter Package",
+    "Infrastructure Audit & Optimization",
+    "Managed IT Services – Annual Contract",
+    "Custom API Integration",
+    "Enterprise Monitoring Setup",
+    "Cybersecurity Bundle",
+    "DevOps Automation Rollout",
+    "Private Cloud Migration",
+    "License Expansion – ProSecure SaaS Suite",
+    "ITSM Implementation",
+    "Q2 Service Extension",
+    "Cloud Cost Optimization Sprint",
+    "Multi-Tenant Setup – SecureAccess Platform",
+    "Infrastructure-as-Code Workshop",
+    "Platform Uptime SLA Upgrade",
+    "Cloud Data Integration – Custom Solutions",
+    "SaaS Migration & Implementation",
+    "IT Infrastructure Automation",
+    "Cyber Defense Enhancement",
+    "Platform Customization",
+    "24/7 Support Package – IT Operations",
+    "Cloud Backup & Disaster Recovery",
+    "Hybrid Cloud Deployment – Enterprise Solution",
+    "License Renewal – Premium Plan",
+    "AI-Powered Analytics Integration – DeepData Insights",
+    "Infrastructure Optimization & Scaling – GrowthTier SaaS",
+    "Enterprise Solution Package – SaaS Integration",
+    "Security Audit & Compliance – GDPR Readiness",
+    "API Management & Gateway Setup – RedShift Networks",
+    "Data Warehousing Setup – Cloud-based Reporting"
 ]
 
 # 🔹 Generate Deals
 companies = {}  # Dictionary to store companies and their deals
 
-for i in range(100):
+for i in range(1500):  # Loop to generate 100 deals
     company_name = random.choice(COMPANY_NAMES)
 
     # Create a company entry if it doesn't exist
     if company_name not in companies:
         companies[company_name] = {"deals": []}
 
-    # Determine deal type based on previous deals
+    # 🔹 Determine deal type based on previous deals
     company_deals = companies[company_name]["deals"]
     deal_name = f"{random.choice(DEAL_NAME_VARIATIONS)}"
     amount = random.randint(500, 50000)
-    stage = random.choice(DEAL_STAGES)
-    probability = STAGE_PROBABILITIES[stage]
-    forecast_amount = round(amount * probability, 2)
 
-    days_ago = random.randint(1, 90)
-    days_offset = random.randint(5, 20)
+    days_ago = random.randint(1, 60)
+    days_offset = random.randint(5, 30)
     close_date_obj = datetime.now() - timedelta(days=days_ago)
     create_date_obj = close_date_obj - timedelta(days=days_offset)
     create_date = create_date_obj.strftime("%Y-%m-%d")
     close_date = close_date_obj.strftime("%Y-%m-%d")
+    deal_stage_sales = random.choice(DEAL_STAGES)
+    probability = STAGE_PROBABILITIES[deal_stage_sales]
+    forecast_amount = round(amount * probability, 2)
+    deal_type = random.choice(DEAL_TYPE)
 
-    # If there are existing deals, we now allow open deals in addition to closed deals
-    if not company_deals:
-        # First deal for this company: open or closed-won
-        dealstage = random.choice([s for s in DEAL_STAGES if s != "closedlost"])  # Exclude "closedlost" for the first deal
-    else:
-        # If there are deals, we will include open deals regardless of closed-won or closed-lost deals
-        closed_won_deals = [deal for deal in company_deals if deal['dealstage'] == "closedwon"]
-        closed_lost_deals = [deal for deal in company_deals if deal['dealstage'] == "closedlost"]
-        
-        if closed_won_deals:
-            # If the company already has a closed-won deal, create another open deal
-            dealstage = random.choice([s for s in DEAL_STAGES if s != "closedwon" and s != "closedlost"])  # Avoid "closedwon" and "closedlost"
-        else:
-            # If the company has no closed-won deal, create an open deal
-            dealstage = random.choice([s for s in DEAL_STAGES if s != "closedlost"])  # Avoid "closedlost"
-        
+    # 🔹 Assemble deal
     deal_data = {
         "properties": {
             "dealname": deal_name,
             "amount": str(amount),
             "probability_amount": str(forecast_amount),
             "probability": float(probability),
-            "dealstage": dealstage,
+            "deal_stage_sales": deal_stage_sales,
             "closedate": close_date,
             "createdate": create_date,
             "company_name": company_name,
-            "pipeline": "default"
+            "pipeline": "default",
+            "dealtype": deal_type
         }
     }
 
-    # Add the generated deal to the company
-    company_deals.append(deal_data["properties"])
+    # 🔹 Append the full deal to the company's deals
+    company_deals.append(deal_data)
 
     # Send request to HubSpot API
     response = requests.post(URL, json=deal_data, headers=HEADERS)
 
     if response.status_code == 201:
-        print(f"✅ Deal {i+1} created: {deal_name} - {amount}€ - {forecast_amount}€ - {probability} - {dealstage} - {company_name} - {close_date} - {create_date}")
+        print(f"✅ Deal {i+1} created: {deal_name} - {amount}€ - {forecast_amount}€ - {probability} - {deal_type} - {deal_stage_sales} - {company_name} - {close_date} - {create_date}")
     else:
         print(f"❌ Error with Deal {i+1}: {response.status_code} - {response.text}")

@@ -9,11 +9,11 @@ from collections import defaultdict
 
 # 🔐 Auth für Google Sheets
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-
+CREDS_FILE = "hs-sales-pipeline-analysis-0d212e642d40.json"
 SPREADSHEET_NAME = "HubSpot - Sales Pipeline Analysis"
 DEAL_TAB = "HubSpot - Deal"
 COMPANY_TAB = "HubSpot - Company"
-OWNER_TAB = "HubSpot - Deal Owner"
+OWNER_TAB = "HubSpot - Sales Reps"
 
 creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
 client = gspread.authorize(creds)
@@ -22,23 +22,24 @@ deal_sheet = client.open(SPREADSHEET_NAME).worksheet(DEAL_TAB)
 # 🔐 HubSpot Auth
 load_dotenv()
 ACCESS_TOKEN = os.getenv("HUBSPOT_API_KEY")
-URL = "https://api.hubapi.com/crm/v3/objects/deals?limit=100&properties=company_name,dealname,amount,probability,dealstage,closedate,createdate,hubspot_owner_id&associations=companies"
+URL = "https://api.hubapi.com/crm/v3/objects/deals?limit=100&properties=company_name,dealname,amount,probability,deal_type,deal_stage_sales,closedate,createdate,hubspot_owner_id&associations=companies"
 headers = {
     "Authorization": f"Bearer {ACCESS_TOKEN}",
     "Content-Type": "application/json"
 }
-
+# Deal Types
 DEAL_TYPE = ["newbusiness", "existingbusiness"]
 
 # 🔹 Dummy-Daten für Deal Owners
-DEAL_OWNERS = [
+SALES_REPS = [
     "John Peterson", "Celine Dupont", "Margaret Wilson", "Charlotte Becker", "David Klein",
     "Andre Moreau", "Philip Schneider", "Emily Carter", "Lucas Hoffmann", "Anna Fischer",
     "Noah Müller", "Isabelle Lang", "Leon Weber", "Nina Schröder", "Tom Berger"
 ]
-DEAL_OWNER_IDS = {name: i + 1001 for i, name in enumerate(DEAL_OWNERS)}
+SALES_REPS_IDS = {name: i + 1001 for i, name in enumerate(SALES_REPS)}
 
 STAGE_PROBABILITIES = {
+    "sql": 0.05,
     "appointmentscheduled": 0.10,
     "qualifiedtobuy": 0.25,
     "presentationscheduled": 0.40,
@@ -54,14 +55,14 @@ ICP_TIER = ["ICP 1", "ICP 2", "ICP 3"]
 
 # Dictionaries zur Speicherung
 companies = {}         # {our_company_id: {Company ID, Company Name, Industry, Company Size, Country, ICP Tier, Lifecycle Stage}}
-owners = {}            # {owner_id: owner_name}
+sales_reps = {}            # {sales_reps_id: sales_reps}
 company_mapping = {}   # {company_name: {"company_id": x, "first_closed_won": False, "deal_count": 0}}
 company_deals_map = defaultdict(list)  # {our_company_id: [final_stage1, final_stage2, ...]}
 
 # Funktion: Generiere Stage History für einen Deal
-# computed_deal_type wird extern berechnet
-def generate_stage_history(deal, company_id, deal_id, computed_deal_type):
+def generate_stage_history(deal, company_id, deal_id):
     deal_name = deal.get("dealname", "")
+    deal_type = deal.get("deal_type", "")
     company_name = deal.get("company_name", "")
     amount = deal.get("amount", "")
     create_date = deal.get("createdate", "")[:10]
@@ -69,26 +70,54 @@ def generate_stage_history(deal, company_id, deal_id, computed_deal_type):
         current_date = datetime.strptime(create_date, "%Y-%m-%d")
     except:
         return []
-    selected_stages = random.choice([
-        ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin", "contractsent", "closedwon"],
-        ["appointmentscheduled", "qualifiedtobuy", "closedlost"],
-        ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "closedlost"],
-        ["appointmentscheduled", "qualifiedtobuy", "contractsent", "closedlost"],
-        ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin", "closedlost"],
-        ["appointmentscheduled"],
-        ["appointmentscheduled", "qualifiedtobuy"],
-        ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled"],
-        ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin"]
-    ])
-    deal_owner_name = random.choice(DEAL_OWNERS)
-    owner_id = DEAL_OWNER_IDS[deal_owner_name]
-    owners[owner_id] = deal_owner_name
+    selected_stages = random.choices([
+    # Closed Deals (Won & Lost)
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin", "contractsent", "closedwon"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin", "contractsent", "closedlost"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin", "closedlost"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "closedlost"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "closedlost"],
+    ["sql", "appointmentscheduled", "closedlost"],
+    ["sql", "closedlost"],
+    
+    # Open Deals (keine closedwon/closedlost)
+    ["sql"],
+    ["sql", "appointmentscheduled"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "presentationscheduled"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin"],
+    ["sql", "appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin", "contractsent"],
+    ], weights=[
+    # Closed Weights
+    0.15,  # closedwon
+    0.01,
+    0.02,
+    0.30,
+    0.03,
+    0.03,
+    0.03,
+
+    # Open Weights (mehr frühe offene Deals, abnehmend in späteren Stufen)
+    0.07,  # nur sql
+    0.06,
+    0.05,
+    0.06,
+    0.06,
+    0.06
+    ], k=1)
+
+    selected_stages = selected_stages[0] 
+
+    sales_reps_name = random.choice(SALES_REPS)
+    sales_reps_id = SALES_REPS_IDS[sales_reps_name]
+    sales_reps[sales_reps_id] = sales_reps_name
 
     stage_rows = []
     previous_date = current_date
     entered_stage_dates = []
+
     for i, stage in enumerate(selected_stages):
-        entered_stage_date = previous_date + timedelta(days=random.randint(2,25)) if i > 0 else current_date
+        entered_stage_date = previous_date + timedelta(days=random.randint(2,30)) if i > 0 else current_date
         entered_stage_dates.append(entered_stage_date)
         previous_date = entered_stage_date
     for i, stage in enumerate(selected_stages):
@@ -99,32 +128,16 @@ def generate_stage_history(deal, company_id, deal_id, computed_deal_type):
         forecast_amount = round(float(amount)*probability,2) if amount else ""
         closed_date_value = entered_stage_date.strftime("%Y-%m-%d") if stage in ["closedwon", "closedlost"] else ""
         stage_rows.append([
-            deal_id, company_id, owner_id, deal_name, amount, forecast_amount, probability, stage,
+            deal_id, company_id, sales_reps_id, deal_name, amount, forecast_amount, probability, stage,
             computed_deal_type, closed_date_value, create_date if i==0 else "", entered_stage_date.strftime("%Y-%m-%d"),
-            days_in_stage, "Sales Pipeline"
+            days_in_stage, "Sales Pipeline", deal_type
         ])
     return stage_rows
-
-# Funktion: Lifecycle Stage Mapping basierend auf allen finalen Deal Stages
-def map_to_lifecycle_stage(deal_stages):
-    mapping = {
-        "appointmentscheduled": "MQL",
-        "qualifiedtobuy": "SQL",
-        "presentationscheduled": "Opportunity",
-        "decisionmakerboughtin": "Opportunity",
-        "contractsent": "Opportunity",
-        "closedwon": "Customer",
-        "closedlost": "Disqualified"
-    }
-    for stage in reversed(deal_stages):
-        if stage in mapping:
-            return mapping[stage]
-    return "MQL"
 
 # API-Abfrage
 deals = []
 deal_id_counter = 1001  # Deal IDs beginnen bei 1001
-company_id_counter = 1013  # Company IDs beginnen bei 1013
+company_id_counter = 111111  # Company IDs beginnen bei 111111
 after = None
 
 while True:
@@ -149,7 +162,10 @@ while True:
                 "Company Name": company_name_from_deal,
                 "Industry": random.choice(INDUSTRIES),
                 "Company Size": random.choice(COMPANY_SIZES),
-                "Country": random.choice(["Germany", "France", "USA", "UK", "Australia", "Canada"]),
+                "Country": random.choice(["Albania", "Andorra", "Armenia", "Austria", "Belarus", "Belgium", "Bosnia and Herzegovina", "Bulgaria", "Croatia", "Cyprus", "Czech Republic", "Denmark", "Estonia",  
+                                          "Finland", "France", "Georgia", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy", "Kosovo", "Latvia", "Lithuania", "Luxembourg",  
+                                          "Malta", "Moldova", "Monaco", "Montenegro", "Netherlands", "North Macedonia", "Norway", "Poland", "Portugal", "Romania", "Serbia", "Slovakia", "Slovenia",  
+                                          "Spain", "Sweden", "Switzerland", "Turkey", "Ukraine", "United Kingdom"]),
                 "ICP Tier": random.choice(ICP_TIER),
                 "Lifecycle Stage": ""  # wird später gesetzt
             }
@@ -165,7 +181,7 @@ while True:
         else:
             computed_deal_type = "existingbusiness" if comp_info["first_closed_won"] else "newbusiness"
         
-        stage_rows = generate_stage_history(props, company_id, deal_id_counter, computed_deal_type)
+        stage_rows = generate_stage_history(props, company_id, deal_id_counter)
         if stage_rows:
             final_stage = stage_rows[-1][7]  # Index 7 = Deal Stage
             company_mapping[company_name_from_deal]["deal_count"] += 1
@@ -178,32 +194,71 @@ while True:
         break
     after = response["paging"]["next"]["after"]
 
-# Nachträgliche Berechnung der Lifecycle Stage für jede Company anhand aller Deal-Stages
-for comp in companies.values():
-    comp_id = comp["Company ID"]
-    all_stages = company_deals_map[comp_id]
-    comp["Lifecycle Stage"] = map_to_lifecycle_stage(all_stages)
+# Schritt 1: Deals pro Company nach `create_date` sortieren und nummerieren
+company_deals = defaultdict(list)
+
+# Alle Deals in company_deals_map einfügen, gruppiert nach Company
+for deal in deals:
+    company_id = deal[1]  # Company ID
+    company_deals[company_id].append(deal)
+
+# Schritt 2: Sortiere die Deals pro Company nach `create_date` für den "appointmentscheduled"-Stage und nummeriere sie
+numbered_deals = []
+deal_number_mapping = {}  # Eine Map, um Deals die gleiche Nummer zuzuweisen, basierend auf Deal ID
+company_deal_numbers = defaultdict(int)  # Für jede Company, um die Deal-Nummer zu tracken
+
+for company_id, company_deals_list in company_deals.items():
+    # Schritt 2a: Finde alle Deals mit dem Stage "appointmentscheduled"
+    appointment_scheduled_deals = [deal for deal in company_deals_list if deal[7] == "sql"]  # Stage ist an Index 7
+    
+    # Schritt 2b: Sortiere Deals nach create_date (Index 10)
+    sorted_deals = sorted(appointment_scheduled_deals, key=lambda x: x[10])  # x[10] ist die "Create Date"
+    
+    # Schritt 2c: Nummeriere Deals basierend auf ihrem Create Date (die Deals mit `appointmentscheduled`-Stage)
+    for deal in sorted_deals:
+        deal_id = deal[0]  # Deal ID
+        
+        # Wenn es der erste Deal dieser Company ist oder ein neuer Deal, dem eine neue Nummer zugewiesen werden muss
+        if deal_id not in deal_number_mapping:
+            # Erhöhe die Deal Nummer für die Company
+            company_deal_numbers[company_id] += 1
+            deal_number_mapping[deal_id] = company_deal_numbers[company_id]
+        
+        # Hole die Deal Nummer für den aktuellen Deal
+        deal_number = deal_number_mapping[deal_id]
+        
+        # Füge die Deal-Nummer an der richtigen Stelle hinzu (Index 14, da 0-basierte Indizes)
+        numbered_deals.append(deal[:14] + [deal_number] + deal[14:])  # Deal Number an Index 14 anfügen
+
+    # Schritt 2d: Für alle anderen Deals (auch die, die den `appointmentscheduled`-Stage nicht haben), ebenfalls die gleiche Nummer vergeben
+    for deal in company_deals_list:
+        if deal[7] != "sql":  # Wenn der Stage nicht `appointmentscheduled` ist
+            deal_id = deal[0]  # Deal ID
+            # Setze die Deal Nummer auf die, die für das zugehörige `appointmentscheduled` Deal vergeben wurde
+            deal_number = deal_number_mapping.get(deal_id, None)
+            if deal_number:  # Nur, wenn es einen Deal mit diesem Deal ID gibt, der bereits eine Nummer hat
+                numbered_deals.append(deal[:14] + [deal_number] + deal[14:])
 
 # Google Sheets: Befüllen
 deal_sheet.clear()
 deal_sheet.append_row([
-    "Deal ID", "Company ID", "Owner ID", "Deal Name", "Amount", "Forecast Amount", "Probability",
-    "Deal Stage", "Deal Type", "Close Date", "Create Date", "Entered Stage Date", "Days in Stage", "Pipeline"
+    "Deal ID", "Company ID", "Sales Rep ID", "Deal Name", "Amount", "Forecast Amount", "Probability",
+    "Deal Stage", "Deal Type", "Close Date", "Create Date", "Entered Stage Date", "Days in Stage", "Pipeline", "Deal Number"
 ])
-deal_sheet.append_rows(deals)
+deal_sheet.append_rows(numbered_deals)  # Verwende numbered_deals statt deals
 
 company_sheet = client.open(SPREADSHEET_NAME).worksheet(COMPANY_TAB)
 company_sheet.clear()
-company_sheet.append_row(["Company ID", "Company Name", "Industry", "Company Size", "Country", "ICP Tier", "Lifecycle Stage"])
+company_sheet.append_row(["Company ID", "Company Name", "Industry", "Company Size", "Country", "ICP Tier"])
 company_sheet.append_rows([list(comp.values()) for comp in companies.values()])
 
 owner_sheet = client.open(SPREADSHEET_NAME).worksheet(OWNER_TAB)
 owner_sheet.clear()
-owner_sheet.append_row(["Owner ID", "Deal Owner", "Department", "Team", "Region"])
+owner_sheet.append_row(["Sales Rep ID", "Sales Rep", "Department", "Team", "Region"])
 owner_rows = []
-for owner_id, owner_name in owners.items():
+for sales_reps_id, sales_reps_name in sales_reps.items():
     owner_rows.append([
-        owner_id, owner_name,
+        sales_reps_id, sales_reps_name,
         random.choice(["Sales", "Account Management", "Enterprise Sales"]),
         random.choice(["Team A", "Team B", "Team C"]),
         random.choice(["EMEA", "AMER", "APAC"])

@@ -265,4 +265,4 @@ for sales_reps_id, sales_reps_name in sales_reps.items():
     ])
 owner_sheet.append_rows(owner_rows)
 
-print("✅ Alle drei Tabs wurden erfolgreich befüllt.")
+print("✅ Alle drei Tabs im Sheet wurden erfolgreich befüllt.")
